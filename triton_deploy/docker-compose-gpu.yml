@@ -1,0 +1,33 @@
+# GPU 版本：需宿主机安装 NVIDIA 驱动与 nvidia-container-toolkit
+# 启动: docker compose -f docker-compose-gpu.yml up -d
+
+services:
+  tritonserver:
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/triton_insightface:25.10-py3-1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tritonserver
+    ports:
+      - "8000:8000"   # HTTP
+      - "8001:8001"   # gRPC
+      - "8002:8002"   # Metrics
+    command: >
+      tritonserver
+      --model-repository=/models
+      --strict-model-config=false
+      --log-verbose=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v2/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
