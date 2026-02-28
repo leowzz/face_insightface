@@ -11,5 +11,6 @@ dependencies = [
     "onnxruntime==1.20",
     "opencv-python>=4.13.0.92",
     "opencv-python-headless>=4.8",
+    "pydantic>=2.0",
     "tritonclient[http]>=2.43.0",
 ]
