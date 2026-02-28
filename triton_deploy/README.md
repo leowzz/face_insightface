@@ -35,9 +35,10 @@ bash prepare_models.sh
 脚本会从 `~/.insightface/models/buffalo_l/` 复制模型，并打印真实的 input/output tensor 名称。
 请对照输出核实 `config.pbtxt` 中的字段（开发阶段 `strict-model-config=false` 可自动推断，无需手动修改）。
 
-### Step 2：启动 Triton
+### Step 2：构建并启动 Triton（模型与 client 已打进镜像）
 
 ```bash
+docker compose build    # 使用 base tritonserver:25.10-py3，将 model_repository 与 client 打入镜像
 docker compose up -d
 docker compose logs -f   # 等待出现 "Started GRPCInferenceService"
 ```

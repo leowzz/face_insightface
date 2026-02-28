@@ -1,13 +1,15 @@
 services:
   tritonserver:
-    image: instill/tritonserver:22.05-py3-cpu-arm64
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/triton_insightface:25.10-py3
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: tritonserver
     ports:
       - "8000:8000"   # HTTP
       - "8001:8001"   # gRPC
       - "8002:8002"   # Metrics
-    volumes:
-      - ./model_repository:/models:ro
+    # 模型与代码已打进镜像，无需挂载 volume
     command: >
       tritonserver
       --model-repository=/models

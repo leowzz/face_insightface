@@ -1,13 +1,28 @@
 #!/usr/bin/env bash
-# prepare_models.sh - 复制模型文件并打印真实的 tensor 名称和 shape
+# prepare_models.sh - 下载（如需）并复制 buffalo_l 模型，打印 tensor 名称和 shape
 set -euo pipefail
 
 INSIGHTFACE_DIR="${HOME}/.insightface/models/buffalo_l"
-REPO_DIR="$(cd "$(dirname "$0")" && pwd)/model_repository"
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$REPO_DIR"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+MODEL_REPO_DIR="${REPO_DIR}/model_repository"
+
+if [[ ! -f "${INSIGHTFACE_DIR}/det_10g.onnx" ]] || [[ ! -f "${INSIGHTFACE_DIR}/w600k_r50.onnx" ]]; then
+  echo "=== 下载 buffalo_l 模型（首次运行，约 300MB+）==="
+  (cd "$REPO_ROOT" && uv run python -c "
+from insightface.app import FaceAnalysis
+app = FaceAnalysis(name=\"buffalo_l\", providers=[\"CPUExecutionProvider\"])
+app.prepare(ctx_id=0, det_size=(640, 640))
+print(\"模型已下载到:\", app.models[\"detection\"].model_file if \"detection\" in app.models else \"~/.insightface/models/buffalo_l\")
+")
+  echo ""
+fi
 
 echo "=== 复制模型文件 ==="
-cp "${INSIGHTFACE_DIR}/det_10g.onnx"   "${REPO_DIR}/det_10g/1/model.onnx"
-cp "${INSIGHTFACE_DIR}/w600k_r50.onnx" "${REPO_DIR}/w600k_r50/1/model.onnx"
+mkdir -p "${MODEL_REPO_DIR}/det_10g/1" "${MODEL_REPO_DIR}/w600k_r50/1"
+cp "${INSIGHTFACE_DIR}/det_10g.onnx"   "${MODEL_REPO_DIR}/det_10g/1/model.onnx"
+cp "${INSIGHTFACE_DIR}/w600k_r50.onnx" "${MODEL_REPO_DIR}/w600k_r50/1/model.onnx"
 echo "已复制 det_10g.onnx → model_repository/det_10g/1/model.onnx"
 echo "已复制 w600k_r50.onnx → model_repository/w600k_r50/1/model.onnx"
 
