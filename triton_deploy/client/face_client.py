@@ -5,6 +5,7 @@ face_client.py - Triton Inference Server 人脸检测+识别客户端
     python face_client.py <image_path>
     python face_client.py ../../data/leo01.png
 """
+import os
 import sys
 import time
 import numpy as np
@@ -156,7 +157,8 @@ if __name__ == "__main__":
         logger.error("无法读取图片: {}", img_path)
         sys.exit(1)
 
-    client = FaceTritonClient()
+    url = os.environ.get("TRITON_SERVER_URL", "localhost:8000")
+    client = FaceTritonClient(url=url)
     faces = client.get_faces(img)
 
     logger.info("========== 结果汇总 ==========")

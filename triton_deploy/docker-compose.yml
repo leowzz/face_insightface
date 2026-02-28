@@ -1,6 +1,6 @@
 services:
   tritonserver:
-    image: registry.cn-heyuan.aliyuncs.com/leo03w/triton_insightface:25.10-py3
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/triton_insightface:25.10-py3-1.0.0
     build:
       context: .
       dockerfile: Dockerfile
