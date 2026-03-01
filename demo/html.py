@@ -62,13 +62,8 @@ def render_html(
         imgs_parts: list[str] = []
         for i, path in enumerate(cluster.preview_paths):
             if i < 3:
-                tags = [
-                    f"blur_th={run_meta.get('blur_var_threshold', 'N/A')}",
-                    f"pose_yaw_th={run_meta.get('max_pose_yaw_dev', 'N/A')}",
-                    f"pose_roll_th={run_meta.get('max_pose_roll_deg', 'N/A')}",
-                    f"det_conf_th={run_meta.get('det_conf_threshold', 'N/A')}",
-                ]
-                tag_html = "<br/>".join(escape(t) for t in tags)
+                label = cluster.preview_labels[i] if i < len(cluster.preview_labels) else "N/A"
+                tag_html = escape(label)
                 imgs_parts.append(
                     '<div class="img-wrap">'
                     f'<img src="{escape(path)}" alt="cluster-{cluster.cluster_id}" loading="lazy" />'
@@ -85,7 +80,7 @@ def render_html(
         cards.append(
             '<section class="card">'
             f"<h2>人物 {idx}</h2>"
-            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count} | 页面展示最清晰 {len(cluster.preview_paths)} 张（最多10张，前3张带参数标记）</p>"
+            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count} | 页面展示最清晰 {len(cluster.preview_paths)} 张（最多10张，前3张标注参数对应值）</p>"
             '<ul class="facts">'
             f"<li>基础信息(取最清晰3张) 平均检测置信度: {_fmt(cluster.avg_score, 3)}</li>"
             f"<li>平均清晰度(拉普拉斯方差): {_fmt(cluster.avg_blur_var, 1)}</li>"

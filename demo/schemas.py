@@ -107,6 +107,7 @@ class ClusterView(BaseModel):
     cluster_id: int
     face_count: int
     preview_paths: list[str]
+    preview_labels: list[str]
     avg_score: float
     avg_blur_var: float
     avg_bbox_w: float

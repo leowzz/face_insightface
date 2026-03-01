@@ -171,7 +171,8 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
 
         preview_rows = conn.execute(
             """
-            SELECT crop_path
+            SELECT crop_path, score, COALESCE(blur_var, 0) AS blur_var,
+                   pose_yaw, pose_roll
             FROM faces
             WHERE video_id = ? AND cluster_id = ?
             ORDER BY COALESCE(blur_var, 0) DESC, score DESC, id ASC
@@ -217,6 +218,17 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
                 cluster_id=cluster_id,
                 face_count=int(row["face_count"]),
                 preview_paths=[str(item["crop_path"]) for item in preview_rows],
+                preview_labels=[
+                    (
+                        f"det_conf={float(item['score']):.3f} | "
+                        f"blur={float(item['blur_var']):.1f} | "
+                        f"pose_yaw={float(item['pose_yaw']):.3f} | "
+                        f"pose_roll={float(item['pose_roll']):.3f}"
+                        if item['pose_yaw'] is not None and item['pose_roll'] is not None
+                        else f"det_conf={float(item['score']):.3f} | blur={float(item['blur_var']):.1f} | pose=N/A"
+                    )
+                    for item in preview_rows
+                ],
                 avg_score=avg_score,
                 avg_blur_var=avg_blur_var,
                 avg_bbox_w=avg_bbox_w,
