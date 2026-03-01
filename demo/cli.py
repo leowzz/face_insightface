@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+from datetime import datetime
 import sys
 from time import perf_counter
 from pathlib import Path
@@ -416,10 +417,33 @@ def run_demo(config: DemoConfig) -> Path:
         html_t0 = perf_counter()
         clusters = load_cluster_views(conn, video_row.id, preview_limit=10)
         total_faces = count_faces(conn, video_row.id)
+        run_meta = {
+            "run_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "sample_fps": str(config.sample_fps),
+            "start_time_sec": str(config.start_time_sec),
+            "max_duration_sec": str(config.max_duration_sec),
+            "triton_url": str(config.triton_url),
+            "det_conf_threshold": str(config.det_conf_threshold),
+            "min_face_size": str(config.min_face_size),
+            "blur_var_threshold": str(config.blur_var_threshold),
+            "similarity_threshold": str(config.similarity_threshold),
+            "max_pose_yaw_dev": str(config.max_pose_yaw_dev),
+            "max_pose_roll_deg": str(config.max_pose_roll_deg),
+            "raw_detect_count": str(raw_detect_count),
+            "accepted_count": str(face_count),
+            "filtered_count": str(filtered_count),
+            "filtered_by_score": str(filtered_by_score),
+            "filtered_by_size": str(filtered_by_size),
+            "filtered_by_empty_crop": str(filtered_by_empty_crop),
+            "filtered_by_blur": str(filtered_by_blur),
+            "filtered_by_pose": str(filtered_by_pose),
+        }
+
         html_content = render_html(
             video_path=str(config.video_path),
             clusters=clusters,
             total_faces=total_faces,
+            run_meta=run_meta,
         )
         write_html(html_path, html_content)
         html_ms = (perf_counter() - html_t0) * 1000
