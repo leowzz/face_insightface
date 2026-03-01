@@ -28,9 +28,9 @@ def render_html(
         cards.append(
             '<section class="card">'
             f"<h2>人物 {idx}</h2>"
-            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count} | 展示最清晰 {len(cluster.preview_paths)} 张</p>"
+            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count} | 页面展示最清晰 {len(cluster.preview_paths)} 张（最多10张）</p>"
             '<ul class="facts">'
-            f"<li>平均检测置信度: {_fmt(cluster.avg_score, 3)}</li>"
+            f"<li>基础信息(取最清晰3张) 平均检测置信度: {_fmt(cluster.avg_score, 3)}</li>"
             f"<li>平均清晰度(拉普拉斯方差): {_fmt(cluster.avg_blur_var, 1)}</li>"
             f"<li>平均人脸框尺寸: {_fmt(cluster.avg_bbox_w, 0)} × {_fmt(cluster.avg_bbox_h, 0)}</li>"
             f"<li>年龄(若可用): {_fmt(cluster.avg_age, 1)}</li>"

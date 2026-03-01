@@ -153,19 +153,10 @@ def save_cluster_assignments(conn: sqlite3.Connection, assignments: list[Cluster
     conn.commit()
 
 
-def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: int = 3) -> list[ClusterView]:
+def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: int = 10) -> list[ClusterView]:
     cluster_rows = conn.execute(
         """
-        SELECT
-            cluster_id,
-            COUNT(*) AS face_count,
-            AVG(score) AS avg_score,
-            AVG(COALESCE(blur_var, 0)) AS avg_blur_var,
-            AVG(COALESCE(bbox_w, 0)) AS avg_bbox_w,
-            AVG(COALESCE(bbox_h, 0)) AS avg_bbox_h,
-            AVG(age) AS avg_age,
-            SUM(CASE WHEN gender = 1 THEN 1 ELSE 0 END) AS male_count,
-            SUM(CASE WHEN gender = 0 THEN 1 ELSE 0 END) AS female_count
+        SELECT cluster_id, COUNT(*) AS face_count
         FROM faces
         WHERE video_id = ? AND cluster_id IS NOT NULL
         GROUP BY cluster_id
@@ -177,6 +168,7 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
     views: list[ClusterView] = []
     for row in cluster_rows:
         cluster_id = int(row["cluster_id"])
+
         preview_rows = conn.execute(
             """
             SELECT crop_path
@@ -188,8 +180,32 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
             (video_id, cluster_id, max(1, preview_limit)),
         ).fetchall()
 
-        male_count = int(row["male_count"] or 0)
-        female_count = int(row["female_count"] or 0)
+        info_rows = conn.execute(
+            """
+            SELECT score, COALESCE(blur_var, 0) AS blur_var, COALESCE(bbox_w, 0) AS bbox_w,
+                   COALESCE(bbox_h, 0) AS bbox_h, age, gender
+            FROM faces
+            WHERE video_id = ? AND cluster_id = ?
+            ORDER BY COALESCE(blur_var, 0) DESC, score DESC, id ASC
+            LIMIT 3
+            """,
+            (video_id, cluster_id),
+        ).fetchall()
+
+        if not info_rows:
+            continue
+
+        n = len(info_rows)
+        avg_score = sum(float(r["score"] or 0.0) for r in info_rows) / n
+        avg_blur_var = sum(float(r["blur_var"] or 0.0) for r in info_rows) / n
+        avg_bbox_w = sum(float(r["bbox_w"] or 0.0) for r in info_rows) / n
+        avg_bbox_h = sum(float(r["bbox_h"] or 0.0) for r in info_rows) / n
+
+        ages = [float(r["age"]) for r in info_rows if r["age"] is not None]
+        avg_age = (sum(ages) / len(ages)) if ages else None
+
+        male_count = sum(1 for r in info_rows if r["gender"] == 1)
+        female_count = sum(1 for r in info_rows if r["gender"] == 0)
         dominant_gender = None
         if male_count > female_count:
             dominant_gender = "male"
@@ -201,11 +217,11 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
                 cluster_id=cluster_id,
                 face_count=int(row["face_count"]),
                 preview_paths=[str(item["crop_path"]) for item in preview_rows],
-                avg_score=float(row["avg_score"] or 0.0),
-                avg_blur_var=float(row["avg_blur_var"] or 0.0),
-                avg_bbox_w=float(row["avg_bbox_w"] or 0.0),
-                avg_bbox_h=float(row["avg_bbox_h"] or 0.0),
-                avg_age=float(row["avg_age"]) if row["avg_age"] is not None else None,
+                avg_score=avg_score,
+                avg_blur_var=avg_blur_var,
+                avg_bbox_w=avg_bbox_w,
+                avg_bbox_h=avg_bbox_h,
+                avg_age=avg_age,
                 dominant_gender=dominant_gender,
             )
         )

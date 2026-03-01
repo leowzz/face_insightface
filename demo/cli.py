@@ -414,7 +414,7 @@ def run_demo(config: DemoConfig) -> Path:
         perf_logger.info(f"cluster_done|{cluster_ms=:.3f}|{len(embedding_rows)=}|{len(assignments)=}")
 
         html_t0 = perf_counter()
-        clusters = load_cluster_views(conn, video_row.id, preview_limit=3)
+        clusters = load_cluster_views(conn, video_row.id, preview_limit=10)
         total_faces = count_faces(conn, video_row.id)
         html_content = render_html(
             video_path=str(config.video_path),
