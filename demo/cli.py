@@ -135,7 +135,7 @@ def _parse_args(argv: list[str] | None = None) -> DemoConfig:
     parser.add_argument("--similarity-threshold", type=float, default=0.65, help="聚类相似度阈值，默认 0.65")
     parser.add_argument("--det-confidence-threshold", type=float, default=0.65, help="检测置信度阈值，默认 0.65")
     parser.add_argument("--min-face-size", type=int, default=80, help="最小人脸框边长（像素），默认 80")
-    parser.add_argument("--blur-threshold", type=float, default=80.0, help="清晰度阈值（Laplacian 方差），默认 80")
+    parser.add_argument("--blur-threshold", type=float, default=120.0, help="清晰度阈值（Laplacian 方差），默认 120")
     parser.add_argument(
         "--max-pose-yaw-dev",
         type=float,
