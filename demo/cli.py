@@ -291,6 +291,11 @@ def run_demo(config: DemoConfig) -> Path:
         triton_total_ms = 0.0
         persist_total_ms = 0.0
         frame_loop_t0 = perf_counter()
+
+        expected_frames = None
+        if config.max_duration_sec is not None and config.sample_fps > 0:
+            expected_frames = max(1, int(config.max_duration_sec * config.sample_fps))
+
         for packet in iter_sampled_frames(
             video_path=str(config.video_path),
             sample_fps=config.sample_fps,
@@ -388,12 +393,35 @@ def run_demo(config: DemoConfig) -> Path:
 
             if frame_count % 20 == 0:
                 commit(conn)
-                logger.info(f"处理中: {frame_count=}, {face_count=}")
                 avg_triton_ms = triton_total_ms / frame_count
                 avg_persist_ms = persist_total_ms / frame_count
-                perf_logger.info(
-                    f"progress|{frame_count=}|{face_count=}|{avg_triton_ms=:.3f}|{avg_persist_ms=:.3f}"
-                )
+
+                elapsed_sec = perf_counter() - frame_loop_t0
+                avg_frame_sec = elapsed_sec / frame_count if frame_count > 0 else 0.0
+                eta_sec = None
+                progress_pct = None
+                if expected_frames is not None:
+                    remaining = max(expected_frames - frame_count, 0)
+                    eta_sec = remaining * avg_frame_sec
+                    progress_pct = min(frame_count / expected_frames * 100.0, 100.0)
+
+                if eta_sec is not None and progress_pct is not None:
+                    logger.info(
+                        "处理中: frame_count={}, face_count={}, progress={:.1f}%, eta≈{:.1f}s",
+                        frame_count,
+                        face_count,
+                        progress_pct,
+                        eta_sec,
+                    )
+                    perf_logger.info(
+                        f"progress|{frame_count=}|{face_count=}|{avg_triton_ms=:.3f}|{avg_persist_ms=:.3f}|"
+                        f"progress_pct={progress_pct:.1f}|eta_sec={eta_sec:.3f}"
+                    )
+                else:
+                    logger.info(f"处理中: {frame_count=}, {face_count=}")
+                    perf_logger.info(
+                        f"progress|{frame_count=}|{face_count=}|{avg_triton_ms=:.3f}|{avg_persist_ms=:.3f}"
+                    )
 
         commit(conn)
         frame_loop_ms = (perf_counter() - frame_loop_t0) * 1000
