@@ -44,6 +44,9 @@ class DetectedFace(BaseModel):
     bbox: np.ndarray
     score: float
     kps: np.ndarray | None = None
+    age: float | None = None
+    gender: int | None = None
+    pose: np.ndarray | None = None
     embedding: np.ndarray
 
 
@@ -69,6 +72,15 @@ class FaceInsert(BaseModel):
     bbox_y1: float
     bbox_x2: float
     bbox_y2: float
+    blur_var: float
+    bbox_w: float
+    bbox_h: float
+    has_kps: int
+    pose_yaw: float | None = None
+    pose_pitch: float | None = None
+    pose_roll: float | None = None
+    age: float | None = None
+    gender: int | None = None
     crop_path: str
     embedding: np.ndarray
 
@@ -95,3 +107,9 @@ class ClusterView(BaseModel):
     cluster_id: int
     face_count: int
     preview_paths: list[str]
+    avg_score: float
+    avg_blur_var: float
+    avg_bbox_w: float
+    avg_bbox_h: float
+    avg_age: float | None = None
+    dominant_gender: str | None = None

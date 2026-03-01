@@ -103,6 +103,9 @@ class _LocalInsightFaceClient:
                     "bbox": np.asarray(face.bbox, dtype=np.float32),
                     "score": score,
                     "kps": np.asarray(kps, dtype=np.float32) if kps is not None else None,
+                    "age": float(getattr(face, "age")) if getattr(face, "age", None) is not None else None,
+                    "gender": int(getattr(face, "gender")) if getattr(face, "gender", None) is not None else None,
+                    "pose": np.asarray(getattr(face, "pose"), dtype=np.float32) if getattr(face, "pose", None) is not None else None,
                     "embedding": embedding,
                 }
             )
@@ -174,6 +177,9 @@ def _normalize_faces(raw_faces: list) -> list[DetectedFace]:
                 bbox=np.asarray(raw["bbox"], dtype=np.float32),
                 score=float(raw["score"]),
                 kps=np.asarray(raw["kps"], dtype=np.float32) if "kps" in raw and raw["kps"] is not None else None,
+                age=float(raw["age"]) if "age" in raw and raw["age"] is not None else None,
+                gender=int(raw["gender"]) if "gender" in raw and raw["gender"] is not None else None,
+                pose=np.asarray(raw["pose"], dtype=np.float32) if "pose" in raw and raw["pose"] is not None else None,
                 embedding=np.asarray(raw["embedding"], dtype=np.float32),
             )
         )
@@ -339,6 +345,12 @@ def run_demo(config: DemoConfig) -> Path:
                 abs_crop = run_dir / rel_crop
                 cv2.imwrite(str(abs_crop), crop)
 
+                pose_yaw = pose_pitch = pose_roll = None
+                if face.pose is not None and len(face.pose) >= 3:
+                    pose_yaw = float(face.pose[0])
+                    pose_pitch = float(face.pose[1])
+                    pose_roll = float(face.pose[2])
+
                 insert_face(
                     conn,
                     FaceInsert(
@@ -350,6 +362,15 @@ def run_demo(config: DemoConfig) -> Path:
                         bbox_y1=float(face.bbox[1]),
                         bbox_x2=float(face.bbox[2]),
                         bbox_y2=float(face.bbox[3]),
+                        blur_var=float(blur_var),
+                        bbox_w=float(face_w),
+                        bbox_h=float(face_h),
+                        has_kps=1 if face.kps is not None else 0,
+                        pose_yaw=pose_yaw,
+                        pose_pitch=pose_pitch,
+                        pose_roll=pose_roll,
+                        age=face.age,
+                        gender=face.gender,
                         crop_path=rel_crop.as_posix(),
                         embedding=face.embedding,
                     ),
@@ -393,7 +414,7 @@ def run_demo(config: DemoConfig) -> Path:
         perf_logger.info(f"cluster_done|{cluster_ms=:.3f}|{len(embedding_rows)=}|{len(assignments)=}")
 
         html_t0 = perf_counter()
-        clusters = load_cluster_views(conn, video_row.id, preview_limit=12)
+        clusters = load_cluster_views(conn, video_row.id, preview_limit=3)
         total_faces = count_faces(conn, video_row.id)
         html_content = render_html(
             video_path=str(config.video_path),

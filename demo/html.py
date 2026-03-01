@@ -8,19 +8,17 @@ from pathlib import Path
 from .schemas import ClusterView
 
 
+def _fmt(v: float | None, digits: int = 2) -> str:
+    if v is None:
+        return "N/A"
+    return f"{v:.{digits}f}"
+
+
 def render_html(
     video_path: str,
     clusters: list[ClusterView],
     total_faces: int,
 ) -> str:
-    """Render result page.
-
-    :param video_path: 视频路径。
-    :param clusters: 聚类结果视图。
-    :param total_faces: 总人脸数量。
-    :return: html 内容。
-    """
-
     cards: list[str] = []
     for idx, cluster in enumerate(clusters, start=1):
         imgs = "".join(
@@ -30,7 +28,14 @@ def render_html(
         cards.append(
             '<section class="card">'
             f"<h2>人物 {idx}</h2>"
-            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count}</p>"
+            f"<p>cluster_id={cluster.cluster_id} | 图片数={cluster.face_count} | 展示最清晰 {len(cluster.preview_paths)} 张</p>"
+            '<ul class="facts">'
+            f"<li>平均检测置信度: {_fmt(cluster.avg_score, 3)}</li>"
+            f"<li>平均清晰度(拉普拉斯方差): {_fmt(cluster.avg_blur_var, 1)}</li>"
+            f"<li>平均人脸框尺寸: {_fmt(cluster.avg_bbox_w, 0)} × {_fmt(cluster.avg_bbox_h, 0)}</li>"
+            f"<li>年龄(若可用): {_fmt(cluster.avg_age, 1)}</li>"
+            f"<li>性别(若可用): {escape(cluster.dominant_gender or 'N/A')}</li>"
+            '</ul>'
             f'<div class="grid">{imgs}</div>'
             "</section>"
         )
@@ -47,7 +52,9 @@ def render_html(
     h1 {{ margin: 0 0 8px; }}
     .meta {{ color: #666; margin-bottom: 24px; }}
     .card {{ background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }}
-    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-top: 12px; }}
+    .facts {{ margin: 8px 0 10px; color: #444; }}
+    .facts li {{ margin: 2px 0; }}
+    .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; margin-top: 12px; }}
     .grid img {{ width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 8px; border: 1px solid #eee; }}
   </style>
 </head>
@@ -61,7 +68,5 @@ def render_html(
 
 
 def write_html(path: Path, content: str) -> None:
-    """Write HTML file to disk."""
-
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
