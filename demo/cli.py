@@ -356,6 +356,12 @@ def run_demo(config: DemoConfig) -> Path:
                     pose_yaw = float(face.pose[0])
                     pose_pitch = float(face.pose[1])
                     pose_roll = float(face.pose[2])
+                else:
+                    # fallback: InsightFace 某些模型不返回 face.pose，用关键点近似值兜底
+                    if yaw_dev is not None:
+                        pose_yaw = float(yaw_dev)
+                    if roll_deg is not None:
+                        pose_roll = float(roll_deg)
 
                 insert_face(
                     conn,
