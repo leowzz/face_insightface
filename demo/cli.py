@@ -71,6 +71,59 @@ def _load_face_client_class() -> type:
     return FaceTritonClient
 
 
+class _LocalInsightFaceClient:
+    """Local fallback client when Triton is unavailable."""
+
+    def __init__(self, det_size: tuple[int, int] = (640, 640), conf_thresh: float = 0.65):
+        from insightface.app import FaceAnalysis  # pylint: disable=import-outside-toplevel
+
+        self._app = FaceAnalysis(providers=["CPUExecutionProvider"])
+        self._app.prepare(ctx_id=0, det_size=det_size)
+        self._conf_thresh = conf_thresh
+
+    def get_faces(self, img_bgr: np.ndarray) -> list[dict]:
+        raw_faces = self._app.get(img_bgr)
+        faces: list[dict] = []
+        for face in raw_faces:
+            score = float(getattr(face, "det_score", 0.0))
+            if score < self._conf_thresh:
+                continue
+
+            embedding = np.asarray(
+                getattr(face, "normed_embedding", getattr(face, "embedding", np.array([], dtype=np.float32))),
+                dtype=np.float32,
+            )
+            emb_norm = float(np.linalg.norm(embedding))
+            if emb_norm > 0:
+                embedding = embedding / (emb_norm + 1e-6)
+
+            kps = getattr(face, "kps", None)
+            faces.append(
+                {
+                    "bbox": np.asarray(face.bbox, dtype=np.float32),
+                    "score": score,
+                    "kps": np.asarray(kps, dtype=np.float32) if kps is not None else None,
+                    "embedding": embedding,
+                }
+            )
+        return faces
+
+
+def _build_face_client(config: DemoConfig):
+    try:
+        FaceTritonClient = _load_face_client_class()
+        client = FaceTritonClient(
+            url=config.triton_url,
+            det_size=(640, 640),
+            conf_thresh=config.det_conf_threshold,
+        )
+        logger.info("使用 Triton 客户端进行推理")
+        return client
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Triton 不可用，切换本地 InsightFace 推理: {}", exc)
+        return _LocalInsightFaceClient(det_size=(640, 640), conf_thresh=config.det_conf_threshold)
+
+
 def _parse_args(argv: list[str] | None = None) -> DemoConfig:
     parser = argparse.ArgumentParser(description="电影人脸聚类 Demo")
     parser.add_argument("video_path", help="电影文件路径")
@@ -79,7 +132,22 @@ def _parse_args(argv: list[str] | None = None) -> DemoConfig:
     parser.add_argument("--duration", type=float, default=None, help="处理时长（秒），不填则处理完整视频")
     parser.add_argument("--triton-url", default=os.environ.get("TRITON_SERVER_URL", "localhost:8000"))
     parser.add_argument("--output-dir", default="demo/output")
-    parser.add_argument("--similarity-threshold", type=float, default=0.5)
+    parser.add_argument("--similarity-threshold", type=float, default=0.65, help="聚类相似度阈值，默认 0.65")
+    parser.add_argument("--det-confidence-threshold", type=float, default=0.65, help="检测置信度阈值，默认 0.65")
+    parser.add_argument("--min-face-size", type=int, default=80, help="最小人脸框边长（像素），默认 80")
+    parser.add_argument("--blur-threshold", type=float, default=80.0, help="清晰度阈值（Laplacian 方差），默认 80")
+    parser.add_argument(
+        "--max-pose-yaw-dev",
+        type=float,
+        default=None,
+        help="可选姿态过滤：鼻尖到双眼距离不对称度上限（0~1），例如 0.35",
+    )
+    parser.add_argument(
+        "--max-pose-roll-deg",
+        type=float,
+        default=None,
+        help="可选姿态过滤：双眼连线倾斜角绝对值上限（度），例如 25",
+    )
     args = parser.parse_args(argv)
 
     return DemoConfig(
@@ -90,6 +158,11 @@ def _parse_args(argv: list[str] | None = None) -> DemoConfig:
         max_duration_sec=args.duration,
         output_dir=Path(args.output_dir).expanduser().resolve(),
         similarity_threshold=args.similarity_threshold,
+        det_conf_threshold=args.det_confidence_threshold,
+        min_face_size=args.min_face_size,
+        blur_var_threshold=args.blur_threshold,
+        max_pose_yaw_dev=args.max_pose_yaw_dev,
+        max_pose_roll_deg=args.max_pose_roll_deg,
     )
 
 
@@ -100,6 +173,7 @@ def _normalize_faces(raw_faces: list) -> list[DetectedFace]:
             DetectedFace(
                 bbox=np.asarray(raw["bbox"], dtype=np.float32),
                 score=float(raw["score"]),
+                kps=np.asarray(raw["kps"], dtype=np.float32) if "kps" in raw and raw["kps"] is not None else None,
                 embedding=np.asarray(raw["embedding"], dtype=np.float32),
             )
         )
@@ -123,6 +197,31 @@ def _crop_face(frame_bgr: np.ndarray, bbox: np.ndarray, padding_ratio: float = 0
     if sx2 <= sx1 or sy2 <= sy1:
         return np.empty((0, 0, 3), dtype=np.uint8)
     return frame_bgr[sy1:sy2, sx1:sx2]
+
+
+def _laplacian_variance(image_bgr: np.ndarray) -> float:
+    if image_bgr.size == 0:
+        return 0.0
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+
+def _pose_metrics(kps: np.ndarray | None) -> tuple[float | None, float | None]:
+    if kps is None or kps.shape != (5, 2):
+        return None, None
+
+    left_eye = kps[0]
+    right_eye = kps[1]
+    nose = kps[2]
+    eye_dx = float(right_eye[0] - left_eye[0])
+    eye_dy = float(right_eye[1] - left_eye[1])
+    roll_deg = abs(float(np.degrees(np.arctan2(eye_dy, eye_dx))))
+
+    d_left = float(np.linalg.norm(nose - left_eye))
+    d_right = float(np.linalg.norm(right_eye - nose))
+    denom = max(d_left + d_right, 1e-6)
+    yaw_dev = abs(d_left - d_right) / denom
+    return yaw_dev, roll_deg
 
 
 def run_demo(config: DemoConfig) -> Path:
@@ -151,7 +250,9 @@ def run_demo(config: DemoConfig) -> Path:
     try:
         perf_logger.info(
             f"run_start|{config.video_path=}|{config.triton_url=}|{config.sample_fps=}|"
-            f"{config.start_time_sec=}|{config.max_duration_sec=}"
+            f"{config.start_time_sec=}|{config.max_duration_sec=}|{config.det_conf_threshold=}|"
+            f"{config.min_face_size=}|{config.blur_var_threshold=}|{config.max_pose_yaw_dev=}|"
+            f"{config.max_pose_roll_deg=}|{config.similarity_threshold=}"
         )
 
         db_init_t0 = perf_counter()
@@ -167,13 +268,19 @@ def run_demo(config: DemoConfig) -> Path:
         perf_logger.info(f"db_init_done|{db_init_ms=:.3f}|{video_row.id=}")
 
         client_init_t0 = perf_counter()
-        FaceTritonClient = _load_face_client_class()
-        client = FaceTritonClient(url=config.triton_url, det_size=(640, 640))
+        client = _build_face_client(config)
         client_init_ms = (perf_counter() - client_init_t0) * 1000
         perf_logger.info(f"triton_client_init_done|{client_init_ms=:.3f}")
 
         frame_count = 0
         face_count = 0
+        raw_detect_count = 0
+        filtered_count = 0
+        filtered_by_score = 0
+        filtered_by_size = 0
+        filtered_by_empty_crop = 0
+        filtered_by_blur = 0
+        filtered_by_pose = 0
         triton_total_ms = 0.0
         persist_total_ms = 0.0
         frame_loop_t0 = perf_counter()
@@ -188,13 +295,44 @@ def run_demo(config: DemoConfig) -> Path:
 
             triton_t0 = perf_counter()
             faces = _normalize_faces(client.get_faces(packet.frame_bgr))
+            raw_detect_count += len(faces)
             triton_ms = (perf_counter() - triton_t0) * 1000
             triton_total_ms += triton_ms
 
             persist_t0 = perf_counter()
             for face_idx, face in enumerate(faces):
+                if face.score < config.det_conf_threshold:
+                    filtered_count += 1
+                    filtered_by_score += 1
+                    continue
+
+                face_w = float(face.bbox[2] - face.bbox[0])
+                face_h = float(face.bbox[3] - face.bbox[1])
+                if min(face_w, face_h) < config.min_face_size:
+                    filtered_count += 1
+                    filtered_by_size += 1
+                    continue
+
                 crop = _crop_face(packet.frame_bgr, face.bbox)
                 if crop.size == 0:
+                    filtered_count += 1
+                    filtered_by_empty_crop += 1
+                    continue
+
+                blur_var = _laplacian_variance(crop)
+                if blur_var < config.blur_var_threshold:
+                    filtered_count += 1
+                    filtered_by_blur += 1
+                    continue
+
+                yaw_dev, roll_deg = _pose_metrics(face.kps)
+                if config.max_pose_yaw_dev is not None and yaw_dev is not None and yaw_dev > config.max_pose_yaw_dev:
+                    filtered_count += 1
+                    filtered_by_pose += 1
+                    continue
+                if config.max_pose_roll_deg is not None and roll_deg is not None and roll_deg > config.max_pose_roll_deg:
+                    filtered_count += 1
+                    filtered_by_pose += 1
                     continue
 
                 rel_crop = Path("faces") / f"frame_{packet.frame_index:08d}_{face_idx:02d}.jpg"
@@ -238,7 +376,11 @@ def run_demo(config: DemoConfig) -> Path:
         commit(conn)
         frame_loop_ms = (perf_counter() - frame_loop_t0) * 1000
         logger.info(f"抽帧完成: {frame_count=}, {face_count=}")
-        perf_logger.info(f"frame_loop_done|{frame_loop_ms=:.3f}|{frame_count=}|{face_count=}")
+        perf_logger.info(
+            f"frame_loop_done|{frame_loop_ms=:.3f}|{frame_count=}|{raw_detect_count=}|{face_count=}|"
+            f"{filtered_count=}|{filtered_by_score=}|{filtered_by_size=}|{filtered_by_empty_crop=}|"
+            f"{filtered_by_blur=}|{filtered_by_pose=}"
+        )
 
         cluster_t0 = perf_counter()
         embedding_rows = load_face_embeddings(conn, video_row.id)
@@ -269,6 +411,19 @@ def run_demo(config: DemoConfig) -> Path:
             f"{effective_fps=:.3f}|{perf_log_path=}"
         )
         logger.info(f"处理完成: {html_path=}, {len(clusters)=}, {total_faces=}")
+        logger.info(
+            "质量过滤统计: raw_detect_count={} accepted_count={} filtered_count={} "
+            "filtered_by_score={} filtered_by_size={} filtered_by_empty_crop={} "
+            "filtered_by_blur={} filtered_by_pose={}",
+            raw_detect_count,
+            face_count,
+            filtered_count,
+            filtered_by_score,
+            filtered_by_size,
+            filtered_by_empty_crop,
+            filtered_by_blur,
+            filtered_by_pose,
+        )
         return html_path
     finally:
         if conn is not None:

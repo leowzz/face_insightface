@@ -18,7 +18,12 @@ class DemoConfig(BaseModel):
     start_time_sec: float = Field(default=0.0, ge=0)
     max_duration_sec: Optional[float] = Field(default=None, gt=0)
     output_dir: Path = Field(default=Path("demo/output"))
-    similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    similarity_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    det_conf_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    min_face_size: int = Field(default=80, ge=1)
+    blur_var_threshold: float = Field(default=80.0, ge=0.0)
+    max_pose_yaw_dev: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    max_pose_roll_deg: Optional[float] = Field(default=None, ge=0.0, le=90.0)
 
 
 class FramePacket(BaseModel):
@@ -38,6 +43,7 @@ class DetectedFace(BaseModel):
 
     bbox: np.ndarray
     score: float
+    kps: np.ndarray | None = None
     embedding: np.ndarray
 
 
