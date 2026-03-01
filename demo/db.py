@@ -184,7 +184,7 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
         info_rows = conn.execute(
             """
             SELECT score, COALESCE(blur_var, 0) AS blur_var, COALESCE(bbox_w, 0) AS bbox_w,
-                   COALESCE(bbox_h, 0) AS bbox_h, age, gender
+                   COALESCE(bbox_h, 0) AS bbox_h, pose_yaw, pose_roll, age, gender
             FROM faces
             WHERE video_id = ? AND cluster_id = ?
             ORDER BY COALESCE(blur_var, 0) DESC, score DESC, id ASC
@@ -201,6 +201,10 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
         avg_blur_var = sum(float(r["blur_var"] or 0.0) for r in info_rows) / n
         avg_bbox_w = sum(float(r["bbox_w"] or 0.0) for r in info_rows) / n
         avg_bbox_h = sum(float(r["bbox_h"] or 0.0) for r in info_rows) / n
+        yaws = [float(r["pose_yaw"]) for r in info_rows if r["pose_yaw"] is not None]
+        avg_pose_yaw = (sum(yaws) / len(yaws)) if yaws else None
+        rolls = [float(r["pose_roll"]) for r in info_rows if r["pose_roll"] is not None]
+        avg_pose_roll = (sum(rolls) / len(rolls)) if rolls else None
 
         ages = [float(r["age"]) for r in info_rows if r["age"] is not None]
         avg_age = (sum(ages) / len(ages)) if ages else None
@@ -220,12 +224,12 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
                 preview_paths=[str(item["crop_path"]) for item in preview_rows],
                 preview_labels=[
                     (
-                        f"det_conf={float(item['score']):.3f} | "
-                        f"blur={float(item['blur_var']):.1f} | "
-                        f"pose_yaw={float(item['pose_yaw']):.3f} | "
+                        f"det_conf={float(item['score']):.3f}<br/>"
+                        f"blur={float(item['blur_var']):.1f}<br/>"
+                        f"pose_yaw={float(item['pose_yaw']):.3f}<br/>"
                         f"pose_roll={float(item['pose_roll']):.3f}"
                         if item['pose_yaw'] is not None and item['pose_roll'] is not None
-                        else f"det_conf={float(item['score']):.3f} | blur={float(item['blur_var']):.1f} | pose=N/A"
+                        else f"det_conf={float(item['score']):.3f}<br/>blur={float(item['blur_var']):.1f}<br/>pose_yaw=N/A<br/>pose_roll=N/A"
                     )
                     for item in preview_rows
                 ],
@@ -233,6 +237,8 @@ def load_cluster_views(conn: sqlite3.Connection, video_id: int, preview_limit: i
                 avg_blur_var=avg_blur_var,
                 avg_bbox_w=avg_bbox_w,
                 avg_bbox_h=avg_bbox_h,
+                avg_pose_yaw=avg_pose_yaw,
+                avg_pose_roll=avg_pose_roll,
                 avg_age=avg_age,
                 dominant_gender=dominant_gender,
             )

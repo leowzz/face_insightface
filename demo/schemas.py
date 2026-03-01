@@ -112,5 +112,7 @@ class ClusterView(BaseModel):
     avg_blur_var: float
     avg_bbox_w: float
     avg_bbox_h: float
+    avg_pose_yaw: float | None = None
+    avg_pose_roll: float | None = None
     avg_age: float | None = None
     dominant_gender: str | None = None

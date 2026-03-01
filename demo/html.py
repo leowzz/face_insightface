@@ -63,7 +63,7 @@ def render_html(
         for i, path in enumerate(cluster.preview_paths):
             if i < 3:
                 label = cluster.preview_labels[i] if i < len(cluster.preview_labels) else "N/A"
-                tag_html = escape(label)
+                tag_html = label
                 imgs_parts.append(
                     '<div class="img-wrap">'
                     f'<img src="{escape(path)}" alt="cluster-{cluster.cluster_id}" loading="lazy" />'
@@ -85,6 +85,7 @@ def render_html(
             f"<li>基础信息(取最清晰3张) 平均检测置信度: {_fmt(cluster.avg_score, 3)}</li>"
             f"<li>平均清晰度(拉普拉斯方差): {_fmt(cluster.avg_blur_var, 1)}</li>"
             f"<li>平均人脸框尺寸: {_fmt(cluster.avg_bbox_w, 0)} × {_fmt(cluster.avg_bbox_h, 0)}</li>"
+            f"<li>平均姿态 yaw/roll(若可用): {_fmt(cluster.avg_pose_yaw, 3)} / {_fmt(cluster.avg_pose_roll, 3)}</li>"
             f"<li>年龄(若可用): {_fmt(cluster.avg_age, 1)}</li>"
             f"<li>性别(若可用): {escape(cluster.dominant_gender or 'N/A')}</li>"
             '</ul>'
